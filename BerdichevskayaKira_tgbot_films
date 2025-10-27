@@ -1,3 +1,5 @@
+#если что, для того, чтобы начать, нужно сначала написать /start, а уже после выбирать варианты из меню
+
 !pip install pyTelegramBotAPI
 
 from my_token import token
