@@ -1,3 +1,6 @@
+!pip install pyTelegramBotAPI
+
+from my_token import token
 import telebot
 import sqlite3
 import random
