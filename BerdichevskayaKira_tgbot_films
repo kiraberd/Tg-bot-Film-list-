@@ -1,0 +1,173 @@
+import telebot
+import sqlite3
+import random
+from telebot import types 
+
+bot = telebot.TeleBot(token)
+
+def add_plan(msg):
+    with sqlite3.connect('planner_hse.db') as con:
+        cursor = con.cursor()
+        cursor.execute('INSERT INTO planner (user_id, plan) VALUES (?, ?)',
+                       (msg.from_user.id, msg.text))
+        con.commit()
+    bot.send_message(msg.chat.id, 'Отлично! Я запомню данный фильм.')
+    send_keyboard(msg, "Что я могу еще для вас сделать?")
+
+def get_plans_string(tasks):
+    tasks_str = []
+    for val in list(enumerate(tasks)):
+        tasks_str.append(str(val[0] + 1) + ') ' + val[1][0] + '\n')
+    return ''.join(tasks_str)
+
+def show_plans(msg):
+    with sqlite3.connect('planner_hse.db') as con:
+        cursor = con.cursor()
+        cursor.execute('SELECT plan FROM planner WHERE user_id=?', (msg.from_user.id,))
+        tasks = cursor.fetchall()
+        tasks_str = get_plans_string(tasks)
+        if tasks_str:
+            bot.send_message(msg.chat.id, tasks_str)
+        else:
+            bot.send_message(msg.chat.id, "В вашем текущем списке нет фильмов. Добавьте их, а затем попробуйте снова!")
+        send_keyboard(msg, "Что я могу еще для вас сделать?")
+
+def other_get_plans_string(word, tasks):
+    tasks_str = []
+    for val in list(enumerate(tasks)):
+        if word in val[1][0]:
+            tasks_str.append(str(val[0] + 1) + ') ' + val[1][0] + '\n')
+    return ''.join(tasks_str)
+
+def other(msg):
+    with sqlite3.connect('planner_hse.db') as con:
+        cursor = con.cursor()
+        cursor.execute('SELECT plan FROM planner WHERE user_id=={}'.format(msg.from_user.id))
+        word = bot.send_message(msg.from_user.id,
+                     text="что искать?")
+        print(word, word.text)
+        tasks = other_get_plans_string('дело', cursor.fetchall())
+        bot.send_message(msg.chat.id, tasks)
+        send_keyboard(msg, "Что я могу еще для вас сделать?")
+
+def process_search_word(msg):
+    with sqlite3.connect('planner_hse.db') as con:
+        cursor = con.cursor()
+        cursor.execute('SELECT plan FROM planner WHERE user_id=?', (msg.from_user.id,))
+        tasks = cursor.fetchall()
+        tasks_str = other_get_plans_string(msg.text, tasks)
+        if tasks_str:
+            bot.send_message(msg.chat.id, tasks_str)
+        else:
+            bot.send_message(msg.chat.id, "Ничего не найдено.")
+        send_keyboard(msg, "Что я могу еще для вас сделать?")
+
+def delete_one_plan(msg):
+    markup = types.ReplyKeyboardMarkup(row_width=2)
+    with sqlite3.connect('planner_hse.db') as con:
+        cursor = con.cursor()
+        cursor.execute('SELECT plan FROM planner WHERE user_id=?', (msg.from_user.id,))
+        tasks = cursor.fetchall()
+
+        for value in tasks:
+            markup.add(types.KeyboardButton(value[0]))
+        
+        msg = bot.send_message(msg.from_user.id,
+                               text="Выберите фильм из списка, который вы хотите удалить",
+                               reply_markup=markup)
+        bot.register_next_step_handler(msg, delete_one_plan_)
+
+def delete_one_plan_(msg):
+    with sqlite3.connect('planner_hse.db') as con:
+        cursor = con.cursor()
+        cursor.execute('DELETE FROM planner WHERE user_id=? AND plan=?', (msg.from_user.id, msg.text))
+        con.commit()
+    bot.send_message(msg.chat.id, 'Ура, поздравляю с просмотром фильма! Надеюсь, что он вам понравился.')
+    send_keyboard(msg, "Что я могу еще для вас сделать?")
+
+def delete_all_plans(msg):
+    with sqlite3.connect('planner_hse.db') as con:
+        cursor = con.cursor()
+        cursor.execute('DELETE FROM planner WHERE user_id=={}'.format(msg.from_user.id))
+        con.commit()
+    bot.send_message(msg.chat.id, 'Все фильмы в списке удалены. Отличный шанс, чтобы начать смотреть что-то новое!')
+    send_keyboard(msg, "Что я могу еще для вас сделать?")
+
+def random_plan(msg):
+    with sqlite3.connect('planner_hse.db') as con:
+        cursor = con.cursor()
+        cursor.execute('SELECT plan FROM planner WHERE user_id=={}'.format(msg.from_user.id))
+        tasks = cursor.fetchall()
+        if tasks:
+            random_task = random.choice(tasks)[0]  
+            bot.send_message(msg.chat.id, f'Судьба решила все за вас! Вам стоит начать смотреть этот фильм: {random_task}')
+        else:
+            bot.send_message(msg.chat.id, 'В вашем текущем списке нет фильмов. Добавьте их, а затем попробуйте снова!')
+        
+        send_keyboard(msg, "Что я могу еще для вас сделать?")  
+
+def help_command(msg):
+    help_text = (
+        "Запутались? Ничего страшного! Я вам помогу! \n\n"
+        "Я бот по имени Макан, который помогает решить, какой фильм стоит смотреть, и вот что я умею:\n"
+        "• Добавь новый фильм в список — помогает записать те фильмы, которые вы хотите посмотреть, в специальный список.\n"
+        "• Покажи текущий список фильмов — выводит все фильмы, которые вы еще не просмотрели.\n"
+        "• Удали фильм из текущего списка — позволяет удалить тот фильм, который уже просмотрели.\n"
+        "• Удали все фильмы из текущего списка — помогает полностью очистить текущий список и начать с чистого листа.\n"
+        "• Выбери рандомный фильм из списка — если вы не можете решить, что посмотреть, я сделаю это за вас, выбрав рандомный фильм.\n\n"
+        "Видите? Все просто! Вам необходимо только выбрать нужный пункт в меню, чтобы ощутить все прелести бота."
+    )
+    send_keyboard(msg, text=help_text)  
+
+conn = sqlite3.connect('planner_hse.db')
+cursor = conn.cursor()
+try:
+    query = 'CREATE TABLE IF NOT EXISTS planner (ID INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, plan TEXT)'
+    cursor.execute(query)
+except Exception as e:
+    print(f"Ошибка создания таблицы: {e}")
+finally:
+    conn.close()
+
+@bot.message_handler(commands=['start'])
+def send_keyboard(message, text=None):
+    if text is None:
+        text = f'Привет, {message.from_user.first_name}! Кажется, вы заядлый фильмолюб. Я бот, который поможет вам в этом увлечении!'
+    keyboard = types.ReplyKeyboardMarkup(row_width=2)  
+    itembtn1 = types.KeyboardButton('Добавь новый фильм в список') 
+    itembtn2 = types.KeyboardButton('Покажи текущий список фильмов')
+    itembtn3 = types.KeyboardButton('Удали фильм из текущего списка')
+    itembtn4 = types.KeyboardButton("Удали все фильмы из текущего списка")
+    itembtn5 = types.KeyboardButton('Выбери рандомный фильм из списка')
+    itembtn6 = types.KeyboardButton('Спасибо, на этом пока все')
+    itembtn7 = types.KeyboardButton('Помоги разобраться, как работает бот')
+    keyboard.add(itembtn1, itembtn2) 
+    keyboard.add(itembtn3, itembtn4, itembtn5, itembtn6, itembtn7) 
+
+    msg = bot.send_message(message.from_user.id,
+                     text=text, reply_markup=keyboard) 
+
+    bot.register_next_step_handler(msg, callback_worker)
+
+@bot.message_handler(content_types=['text'])
+def handle_docs_audio(message):
+    send_keyboard(message, text="К сожалению, я вас не понимаю. Будьте добры, выберите один из пунктов меню:")
+
+def callback_worker(message):
+    if message.text == 'Добавь новый фильм в список':
+        msg = bot.send_message(message.from_user.id, "Введите фильм:")
+        bot.register_next_step_handler(msg, add_plan)
+    elif message.text == 'Покажи текущий список фильмов':
+        show_plans(message)
+    elif message.text == 'Удали фильм из текущего списка':
+        delete_one_plan(message)
+    elif message.text == 'Удали все фильмы из текущего списка':
+        delete_all_plans(message)
+    elif message.text == 'Выбери рандомный фильм из списка':
+        random_plan(message)
+    elif message.text == 'Спасибо, на этом пока все':
+        bot.send_message(message.from_user.id, "Был рад помочь! Если вам снова понадобится моя помощь, то пишите.")
+    elif message.text == 'Помоги разобраться, как работает бот':
+        help_command(message)
+        
+bot.polling(none_stop=True)
