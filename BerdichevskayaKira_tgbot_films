@@ -42,6 +42,17 @@ def other_get_plans_string(word, tasks):
             tasks_str.append(str(val[0] + 1) + ') ' + val[1][0] + '\n')
     return ''.join(tasks_str)
 
+def other(msg):
+    with sqlite3.connect('planner_hse.db') as con:
+        cursor = con.cursor()
+        cursor.execute('SELECT plan FROM planner WHERE user_id=={}'.format(msg.from_user.id))
+        word = bot.send_message(msg.from_user.id,
+                     text="что искать?")
+        print(word, word.text)
+        tasks = other_get_plans_string('дело', cursor.fetchall())
+        bot.send_message(msg.chat.id, tasks)
+        send_keyboard(msg, "Что я могу еще для вас сделать?")
+
 def process_search_word(msg):
     with sqlite3.connect('planner_hse.db') as con:
         cursor = con.cursor()
